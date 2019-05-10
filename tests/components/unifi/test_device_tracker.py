@@ -181,7 +181,7 @@ async def test_no_clients(hass, mock_controller):
 
     await setup_controller(hass, mock_controller)
     assert len(mock_controller.mock_requests) == 2
-    assert len(hass.states.async_all()) == 2
+    assert len(hass.states.async_all()) == 1
 
 
 async def test_tracked_devices(hass, mock_controller):
@@ -192,7 +192,7 @@ async def test_tracked_devices(hass, mock_controller):
 
     await setup_controller(hass, mock_controller, options)
     assert len(mock_controller.mock_requests) == 2
-    assert len(hass.states.async_all()) == 5
+    assert len(hass.states.async_all()) == 4
 
     client_1 = hass.states.get("device_tracker.client_1")
     assert client_1 is not None
@@ -290,7 +290,7 @@ async def test_restoring_client(hass, mock_controller):
 
     await setup_controller(hass, mock_controller, options)
     assert len(mock_controller.mock_requests) == 3
-    assert len(hass.states.async_all()) == 4
+    assert len(hass.states.async_all()) == 3
 
     device_1 = hass.states.get("device_tracker.client_1")
     assert device_1 is not None
@@ -304,7 +304,7 @@ async def test_dont_track_clients(hass, mock_controller):
 
     await setup_controller(hass, mock_controller, options)
     assert len(mock_controller.mock_requests) == 2
-    assert len(hass.states.async_all()) == 3
+    assert len(hass.states.async_all()) == 2
 
     client_1 = hass.states.get("device_tracker.client_1")
     assert client_1 is None
@@ -322,7 +322,7 @@ async def test_dont_track_devices(hass, mock_controller):
 
     await setup_controller(hass, mock_controller, options)
     assert len(mock_controller.mock_requests) == 2
-    assert len(hass.states.async_all()) == 3
+    assert len(hass.states.async_all()) == 2
 
     client_1 = hass.states.get("device_tracker.client_1")
     assert client_1 is not None
@@ -340,7 +340,7 @@ async def test_dont_track_wired_clients(hass, mock_controller):
 
     await setup_controller(hass, mock_controller, options)
     assert len(mock_controller.mock_requests) == 2
-    assert len(hass.states.async_all()) == 3
+    assert len(hass.states.async_all()) == 2
 
     client_1 = hass.states.get("device_tracker.client_1")
     assert client_1 is not None
