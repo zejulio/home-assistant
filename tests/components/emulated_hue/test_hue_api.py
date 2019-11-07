@@ -18,6 +18,7 @@ from homeassistant.components import (
     media_player,
     cover,
     climate,
+    humidity,
 )
 from homeassistant.components.emulated_hue import Config
 from homeassistant.components.emulated_hue.hue_api import (
@@ -106,6 +107,12 @@ def hass_hue(loop, hass):
 
     loop.run_until_complete(
         setup.async_setup_component(
+            hass, humidity.DOMAIN, {"humidity": [{"platform": "demo"}]}
+        )
+    )
+
+    loop.run_until_complete(
+        setup.async_setup_component(
             hass, media_player.DOMAIN, {"media_player": [{"platform": "demo"}]}
         )
     )
@@ -165,6 +172,18 @@ def hass_hue(loop, hass):
     attrs[emulated_hue.ATTR_EMULATED_HUE_HIDDEN] = False
     hass.states.async_set(hp_entity.entity_id, hp_entity.state, attributes=attrs)
 
+    # Expose Humidifier
+    humidifier_entity = hass.states.get("humidity.humidifier")
+    attrs = dict(humidifier_entity.attributes)
+    attrs[emulated_hue.ATTR_EMULATED_HUE_HIDDEN] = False
+    hass.states.async_set(humidifier_entity.entity_id, humidifier_entity.state, attributes=attrs)
+
+    # Expose Dehumidifier
+    dehumidifier_entity = hass.states.get("humidity.dehumidifier")
+    attrs = dict(dehumidifier_entity.attributes)
+    attrs[emulated_hue.ATTR_EMULATED_HUE_HIDDEN] = False
+    hass.states.async_set(dehumidifier_entity.entity_id, dehumidifier_entity.state, attributes=attrs)
+
     return hass
 
 
@@ -219,6 +238,9 @@ def test_discover_lights(hue_client):
     assert "climate.hvac" in devices
     assert "climate.heatpump" in devices
     assert "climate.ecobee" not in devices
+    assert "humidity.humidifier" in devices
+    assert "humidity.dehumidifier" in devices
+    assert "humidity.hygrostat" not in devices
 
 
 @asyncio.coroutine
@@ -415,6 +437,32 @@ def test_put_light_state_climate_set_temperature(hass_hue, hue_client):
         hass_hue, hue_client, "climate.ecobee", True
     )
     assert ecobee_result.status == 404
+
+
+@asyncio.coroutine
+def test_put_light_state_humidity_set_humidity(hass_hue, hue_client):
+    """Test setting humidity."""
+    brightness = 102
+    hum = round(brightness / 255 * 100)
+
+    dehumidifier_result = yield from perform_put_light_state(
+        hass_hue, hue_client, "humidity.dehumidifier", True, brightness
+    )
+
+    dehumidifier_result_json = yield from dehumidifier_result.json()
+
+    assert dehumidifier_result.status == 200
+    assert len(dehumidifier_result_json) == 2
+
+    dehumidifier = hass_hue.states.get("humidity.dehumidifier")
+    assert dehumidifier.state == humidity.const.HUMIDIFIER_MODE_DRY
+    assert dehumidifier.attributes[humidity.ATTR_HUMIDITY] == hum
+
+    # Make sure we can't change the hygrostat temperature since it's not exposed
+    hygrostat_result = yield from perform_put_light_state(
+        hass_hue, hue_client, "humidity.hygrostat", True
+    )
+    assert hygrostat_result.status == 404
 
 
 @asyncio.coroutine
