@@ -5,7 +5,7 @@ import pytest
 from homeassistant.const import ENERGY_KILO_WATT_HOUR, DEVICE_CLASS_POWER
 
 from homeassistant import setup
-from homeassistant.components import climate, sensor
+from homeassistant.components import climate, humidifier, sensor
 from homeassistant.components.demo.sensor import DemoSensor
 from homeassistant.setup import async_setup_component
 import homeassistant.components.prometheus as prometheus
@@ -22,6 +22,10 @@ async def prometheus_client(loop, hass, hass_client):
 
     await setup.async_setup_component(
         hass, climate.DOMAIN, {"climate": [{"platform": "demo"}]}
+    )
+
+    await setup.async_setup_component(
+        hass, humidifier.DOMAIN, {"humidifier": [{"platform": "demo"}]}
     )
 
     sensor1 = DemoSensor(
@@ -85,6 +89,30 @@ def test_view(prometheus_client):  # pylint: disable=redefined-outer-name
         'current_temperature_c{domain="climate",'
         'entity="climate.heatpump",'
         'friendly_name="HeatPump"} 25.0' in body
+    )
+
+    assert (
+        'current_humidity{domain="humidifier",'
+        'entity="humidifier.humidifier",'
+        'friendly_name="Humidifier"} 77.0' in body
+    )
+
+    assert (
+        'humidity{domain="humidifier",'
+        'entity="humidifier.humidifier",'
+        'friendly_name="Humidifier"} 68.0' in body
+    )
+
+    assert (
+        'current_temperature{domain="humidifier",'
+        'entity="humidifier.dehumidifier",'
+        'friendly_name="Dehumidifier"} 25.0' in body
+    )
+
+    assert (
+        'water_level{domain="humidifier",'
+        'entity="humidifier.dehumidifier",'
+        'friendly_name="Dehumidifier"} 30.0' in body
     )
 
     assert (

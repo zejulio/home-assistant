@@ -8,6 +8,12 @@ import voluptuous as vol
 
 from homeassistant import core as hacore
 from homeassistant.components.climate.const import ATTR_CURRENT_TEMPERATURE
+from homeassistant.components.humidifier.const import (
+    ATTR_CURRENT_HUMIDITY,
+    ATTR_HUMIDITY,
+    ATTR_CURRENT_TEMPERATURE as ATTR_CURRENT_TEMPERATURE_HUMIDIFIER,
+    ATTR_WATER_LEVEL,
+)
 from homeassistant.components.http import HomeAssistantView
 from homeassistant.const import (
     ATTR_DEVICE_CLASS,
@@ -286,6 +292,48 @@ class PrometheusMetrics:
 
         metric = self._metric(
             "climate_state", self.prometheus_cli.Gauge, "State of the thermostat (0/1)"
+        )
+        try:
+            value = self.state_as_number(state)
+            metric.labels(**self._labels(state)).set(value)
+        except ValueError:
+            pass
+
+    def _handle_humidifier(self, state):
+        humidity = state.attributes.get(ATTR_HUMIDITY)
+        if humidity:
+            metric = self._metric(
+                "humidity", self.prometheus_cli.Gauge, "Target Relative Humidity"
+            )
+            metric.labels(**self._labels(state)).set(humidity)
+
+        current_humidity = state.attributes.get(ATTR_CURRENT_HUMIDITY)
+        if current_humidity:
+            metric = self._metric(
+                "current_humidity",
+                self.prometheus_cli.Gauge,
+                "Current Relative Humidity",
+            )
+            metric.labels(**self._labels(state)).set(current_humidity)
+
+        current_temp = state.attributes.get(ATTR_CURRENT_TEMPERATURE_HUMIDIFIER)
+        if current_temp:
+            metric = self._metric(
+                "current_temperature", self.prometheus_cli.Gauge, "Current Temperature"
+            )
+            metric.labels(**self._labels(state)).set(current_temp)
+
+        water_level = state.attributes.get(ATTR_WATER_LEVEL)
+        if water_level:
+            metric = self._metric(
+                "water_level", self.prometheus_cli.Gauge, "Water level"
+            )
+            metric.labels(**self._labels(state)).set(water_level)
+
+        metric = self._metric(
+            "humidifier_state",
+            self.prometheus_client.Gauge,
+            "State of the humidifier (0/1)",
         )
         try:
             value = self.state_as_number(state)
