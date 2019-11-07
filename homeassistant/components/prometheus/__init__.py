@@ -7,6 +7,7 @@ import voluptuous as vol
 
 from homeassistant import core as hacore
 from homeassistant.components.climate.const import ATTR_CURRENT_TEMPERATURE
+from homeassistant.components.humidity.const import ATTR_CURRENT_HUMIDITY, ATTR_HUMIDITY
 from homeassistant.components.http import HomeAssistantView
 from homeassistant.const import (
     ATTR_TEMPERATURE,
@@ -291,6 +292,36 @@ class PrometheusMetrics:
             "climate_state",
             self.prometheus_client.Gauge,
             "State of the thermostat (0/1)",
+        )
+        try:
+            value = self.state_as_number(state)
+            metric.labels(**self._labels(state)).set(value)
+        except ValueError:
+            pass
+
+    def _handle_humidity(self, state):
+        humidity = state.attributes.get(ATTR_HUMIDITY)
+        if humidity:
+            metric = self._metric(
+                "humidity",
+                self.prometheus_client.Gauge,
+                "Relative Humidity",
+            )
+            metric.labels(**self._labels(state)).set(humidity)
+
+        current_humidity = state.attributes.get(ATTR_CURRENT_HUMIDITY)
+        if current_humidity:
+            metric = self._metric(
+                "current_humidity",
+                self.prometheus_client.Gauge,
+                "Current Relative Humidity",
+            )
+            metric.labels(**self._labels(state)).set(current_humidity)
+
+        metric = self._metric(
+            "humidity_state",
+            self.prometheus_client.Gauge,
+            "State of the hygrostat (0/1)",
         )
         try:
             value = self.state_as_number(state)
