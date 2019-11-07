@@ -196,6 +196,9 @@ def get_accessory(hass, driver, state, aid, config):
     elif state.domain == "climate":
         a_type = "Thermostat"
 
+    elif state.domain == "humidifier":
+        a_type = "HumidifierDehumidifier"
+
     elif state.domain == "cover":
         device_class = state.attributes.get(ATTR_DEVICE_CLASS)
         features = state.attributes.get(ATTR_SUPPORTED_FEATURES, 0)
@@ -372,6 +375,7 @@ class HomeKit:
             type_sensors,
             type_switches,
             type_thermostats,
+            type_humidifiers,
         )
 
         for state in self.hass.states.all():
