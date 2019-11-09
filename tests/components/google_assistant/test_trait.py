@@ -21,6 +21,7 @@ from homeassistant.components import (
     alarm_control_panel,
 )
 from homeassistant.components.climate import const as climate
+from homeassistant.components.humidifier import const as humidifier
 from homeassistant.components.google_assistant import trait, helpers, const, error
 from homeassistant.const import (
     STATE_ON,
@@ -275,6 +276,33 @@ async def test_onoff_media_player(hass):
     await trt_on.execute(trait.COMMAND_ONOFF, BASIC_DATA, {"on": False}, {})
     assert len(off_calls) == 1
     assert off_calls[0].data == {ATTR_ENTITY_ID: "media_player.bla"}
+
+
+async def test_onoff_humidifier(hass):
+    """Test OnOff trait support for humidifier domain."""
+    assert helpers.get_google_type(humidifier.DOMAIN, None) is not None
+    assert trait.OnOffTrait.supported(humidifier.DOMAIN, 0, None)
+
+    trt_on = trait.OnOffTrait(hass, State("humidifier.bla", STATE_ON), BASIC_CONFIG)
+
+    assert trt_on.sync_attributes() == {}
+
+    assert trt_on.query_attributes() == {"on": True}
+
+    trt_off = trait.OnOffTrait(hass, State("humidifier.bla", STATE_OFF), BASIC_CONFIG)
+
+    assert trt_off.query_attributes() == {"on": False}
+
+    on_calls = async_mock_service(hass, humidifier.DOMAIN, SERVICE_TURN_ON)
+    await trt_on.execute(trait.COMMAND_ONOFF, BASIC_DATA, {"on": True}, {})
+    assert len(on_calls) == 1
+    assert on_calls[0].data == {ATTR_ENTITY_ID: "humidifier.bla"}
+
+    off_calls = async_mock_service(hass, humidifier.DOMAIN, SERVICE_TURN_OFF)
+
+    await trt_on.execute(trait.COMMAND_ONOFF, BASIC_DATA, {"on": False}, {})
+    assert len(off_calls) == 1
+    assert off_calls[0].data == {ATTR_ENTITY_ID: "humidifier.bla"}
 
 
 async def test_dock_vacuum(hass):
@@ -735,6 +763,48 @@ async def test_temperature_setting_climate_setpoint_auto(hass):
     )
     assert len(calls) == 1
     assert calls[0].data == {ATTR_ENTITY_ID: "climate.bla", ATTR_TEMPERATURE: 19}
+
+
+async def test_humidity_setting_humidifier_setpoint(hass):
+    """Test HumiditySetting trait support for humidifier domain - setpoint."""
+    assert helpers.get_google_type(humidifier.DOMAIN, None) is not None
+    assert trait.HumiditySettingTrait.supported(humidifier.DOMAIN, 0, None)
+
+    trt = trait.HumiditySettingTrait(
+        hass,
+        State(
+            "humidifier.bla",
+            humidifier.OPERATION_MODE_DRY,
+            {
+                humidifier.ATTR_OPERATION_MODES: [
+                    STATE_OFF,
+                    humidifier.OPERATION_MODE_DRY,
+                ],
+                humidifier.ATTR_MIN_HUMIDITY: 20,
+                humidifier.ATTR_MAX_HUMIDITY: 90,
+                humidifier.ATTR_HUMIDITY: 38,
+                humidifier.ATTR_CURRENT_HUMIDITY: 40,
+            },
+        ),
+        BASIC_CONFIG,
+    )
+    assert trt.sync_attributes() == {
+        "humiditySetpointRange": {"minPercent": 20, "maxPercent": 90}
+    }
+    assert trt.query_attributes() == {
+        "humidityAmbientPercent": 40,
+        "humiditySetpointPercent": 38,
+    }
+    assert trt.can_execute(trait.COMMAND_SET_HUMIDITY, {})
+
+    calls = async_mock_service(hass, humidifier.DOMAIN, humidifier.SERVICE_SET_HUMIDITY)
+
+    await trt.execute(trait.COMMAND_SET_HUMIDITY, BASIC_DATA, {"humidity": 32}, {})
+    assert len(calls) == 1
+    assert calls[0].data == {
+        ATTR_ENTITY_ID: "humidifier.bla",
+        humidifier.ATTR_HUMIDITY: 32,
+    }
 
 
 async def test_lock_unlock_lock(hass):
@@ -1233,8 +1303,8 @@ async def test_fan_speed(hass):
     assert calls[0].data == {"entity_id": "fan.living_room_fan", "speed": "medium"}
 
 
-async def test_modes(hass):
-    """Test Mode trait."""
+async def test_modes_media_player(hass):
+    """Test Mode trait for media_player."""
     assert helpers.get_google_type(media_player.DOMAIN, None) is not None
     assert trait.ModesTrait.supported(
         media_player.DOMAIN, media_player.SUPPORT_SELECT_SOURCE, None
@@ -1320,6 +1390,163 @@ async def test_modes(hass):
 
     assert len(calls) == 1
     assert calls[0].data == {"entity_id": "media_player.living_room", "source": "media"}
+
+
+async def test_modes_humidifier(hass):
+    """Test Mode trait for humidifier domain."""
+    assert helpers.get_google_type(humidifier.DOMAIN, None) is not None
+    assert trait.ModesTrait.supported(humidifier.DOMAIN, 0, None)
+
+    trt = trait.ModesTrait(
+        hass,
+        State(
+            "humidifier.humidifier",
+            humidifier.OPERATION_MODE_OFF,
+            attributes={
+                humidifier.ATTR_OPERATION_MODES: [
+                    STATE_OFF,
+                    humidifier.OPERATION_MODE_HUMIDIFY,
+                ],
+                humidifier.ATTR_PRESET_MODES: [
+                    humidifier.PRESET_NONE,
+                    humidifier.PRESET_HOME,
+                    humidifier.PRESET_AWAY,
+                ],
+                ATTR_SUPPORTED_FEATURES: humidifier.SUPPORT_PRESET_MODE,
+                humidifier.ATTR_MIN_HUMIDITY: 30,
+                humidifier.ATTR_MAX_HUMIDITY: 99,
+                humidifier.ATTR_HUMIDITY: 50,
+                humidifier.ATTR_CURRENT_HUMIDITY: 42,
+                humidifier.ATTR_PRESET_MODE: humidifier.PRESET_HOME,
+                humidifier.ATTR_OPERATION_MODE: humidifier.OPERATION_MODE_OFF,
+            },
+        ),
+        BASIC_CONFIG,
+    )
+
+    attribs = trt.sync_attributes()
+    assert attribs == {
+        "availableModes": [
+            {
+                "name": "operation_mode",
+                "name_values": [{"name_synonym": ["mode"], "lang": "en"}],
+                "settings": [
+                    {
+                        "setting_name": "off",
+                        "setting_values": [{"setting_synonym": ["off"], "lang": "en"}],
+                    },
+                    {
+                        "setting_name": "humidify",
+                        "setting_values": [
+                            {"setting_synonym": ["humidify"], "lang": "en"}
+                        ],
+                    },
+                ],
+                "ordered": False,
+            },
+            {
+                "name": "preset_mode",
+                "name_values": [{"name_synonym": ["preset"], "lang": "en"}],
+                "settings": [
+                    {
+                        "setting_name": "none",
+                        "setting_values": [{"setting_synonym": ["none"], "lang": "en"}],
+                    },
+                    {
+                        "setting_name": "home",
+                        "setting_values": [{"setting_synonym": ["home"], "lang": "en"}],
+                    },
+                    {
+                        "setting_name": "away",
+                        "setting_values": [{"setting_synonym": ["away"], "lang": "en"}],
+                    },
+                ],
+                "ordered": False,
+            },
+        ]
+    }
+
+    assert trt.query_attributes() == {
+        "currentModeSettings": {"operation_mode": "off", "preset_mode": "home"},
+        "on": False,
+        "online": True,
+    }
+
+    assert trt.can_execute(
+        trait.COMMAND_MODES,
+        params={"updateModeSettings": {"operation_mode": "humidify"}},
+    )
+
+    calls = async_mock_service(
+        hass, humidifier.DOMAIN, humidifier.SERVICE_SET_OPERATION_MODE
+    )
+    await trt.execute(
+        trait.COMMAND_MODES,
+        BASIC_DATA,
+        {"updateModeSettings": {"operation_mode": "humidify"}},
+        {},
+    )
+
+    assert len(calls) == 1
+    assert calls[0].data == {
+        "entity_id": "humidifier.humidifier",
+        "operation_mode": "humidify",
+    }
+
+    assert trt.can_execute(
+        trait.COMMAND_MODES, params={"updateModeSettings": {"preset_mode": "away"}}
+    )
+
+    calls = async_mock_service(
+        hass, humidifier.DOMAIN, humidifier.SERVICE_SET_PRESET_MODE
+    )
+    await trt.execute(
+        trait.COMMAND_MODES,
+        BASIC_DATA,
+        {"updateModeSettings": {"preset_mode": "away"}},
+        {},
+    )
+
+    assert len(calls) == 1
+    assert calls[0].data == {
+        "entity_id": "humidifier.humidifier",
+        "preset_mode": "away",
+    }
+
+
+async def test_modes_humidifier_unknown(hass):
+    """Test Mode trait for humidifier domain for Unknown state."""
+    trt = trait.ModesTrait(
+        hass,
+        State(
+            "humidifier.wireless",
+            None,
+            attributes={
+                humidifier.ATTR_OPERATION_MODES: [
+                    STATE_OFF,
+                    humidifier.OPERATION_MODE_HUMIDIFY,
+                ],
+                humidifier.ATTR_PRESET_MODES: [
+                    humidifier.PRESET_NONE,
+                    humidifier.PRESET_HOME,
+                    humidifier.PRESET_AWAY,
+                ],
+                ATTR_SUPPORTED_FEATURES: humidifier.SUPPORT_PRESET_MODE,
+                humidifier.ATTR_MIN_HUMIDITY: 30,
+                humidifier.ATTR_MAX_HUMIDITY: 99,
+                humidifier.ATTR_HUMIDITY: 50,
+                humidifier.ATTR_CURRENT_HUMIDITY: 42,
+                humidifier.ATTR_PRESET_MODE: humidifier.PRESET_HOME,
+            },
+        ),
+        BASIC_CONFIG,
+    )
+
+    assert trt.query_attributes() == {
+        "currentModeSettings": {"operation_mode": "off", "preset_mode": "home"},
+        "on": False,
+        "online": False,
+    }
 
 
 async def test_openclose_cover(hass):

@@ -17,6 +17,12 @@ from homeassistant.const import (
     ATTR_DEVICE_CLASS,
     CLOUD_NEVER_EXPOSED_ENTITIES,
 )
+from homeassistant.components.humidifier.const import (
+    DOMAIN as DOMAIN_HUMIDIFIER,
+    ATTR_OPERATION_MODES,
+    OPERATION_MODE_HUMIDIFY,
+    OPERATION_MODE_DRY,
+)
 
 from . import trait
 from .const import (
@@ -26,6 +32,7 @@ from .const import (
     ERR_FUNCTION_NOT_SUPPORTED,
     DEVICE_CLASS_TO_GOOGLE_TYPES,
     CONF_ROOM_HINT,
+    TYPE_DEHUMIDIFIER,
 )
 from .error import SmartHomeError
 
@@ -295,6 +302,10 @@ class GoogleEntity:
         traits = self.traits()
 
         device_type = get_google_type(domain, device_class)
+        if domain == DOMAIN_HUMIDIFIER:
+            modes = state.attributes.get(ATTR_OPERATION_MODES)
+            if OPERATION_MODE_DRY in modes and OPERATION_MODE_HUMIDIFY not in modes:
+                device_type = TYPE_DEHUMIDIFIER
 
         device = {
             "id": state.entity_id,

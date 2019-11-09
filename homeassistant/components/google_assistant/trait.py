@@ -19,6 +19,7 @@ from homeassistant.components import (
     alarm_control_panel,
 )
 from homeassistant.components.climate import const as climate
+from homeassistant.components.humidifier import const as humidifier
 from homeassistant.const import (
     ATTR_ENTITY_ID,
     ATTR_DEVICE_CLASS,
@@ -105,6 +106,7 @@ COMMAND_OPENCLOSE = PREFIX_COMMANDS + "OpenClose"
 COMMAND_SET_VOLUME = PREFIX_COMMANDS + "setVolume"
 COMMAND_VOLUME_RELATIVE = PREFIX_COMMANDS + "volumeRelative"
 COMMAND_ARMDISARM = PREFIX_COMMANDS + "ArmDisarm"
+COMMAND_SET_HUMIDITY = PREFIX_COMMANDS + "SetHumidity"
 
 TRAITS = []
 
@@ -270,6 +272,7 @@ class OnOffTrait(_Trait):
             fan.DOMAIN,
             light.DOMAIN,
             media_player.DOMAIN,
+            humidifier.DOMAIN,
         )
 
     def sync_attributes(self):
@@ -858,11 +861,14 @@ class HumiditySettingTrait(_Trait):
     """
 
     name = TRAIT_HUMIDITY_SETTING
-    commands = []
+    commands = [COMMAND_SET_HUMIDITY]
 
     @staticmethod
     def supported(domain, features, device_class):
         """Test if state is supported."""
+        if domain == humidifier.DOMAIN:
+            return True
+
         return domain == sensor.DOMAIN and device_class == sensor.DEVICE_CLASS_HUMIDITY
 
     def sync_attributes(self):
@@ -870,10 +876,21 @@ class HumiditySettingTrait(_Trait):
         response = {}
         attrs = self.state.attributes
         domain = self.state.domain
+
         if domain == sensor.DOMAIN:
             device_class = attrs.get(ATTR_DEVICE_CLASS)
             if device_class == sensor.DEVICE_CLASS_HUMIDITY:
                 response["queryOnlyHumiditySetting"] = True
+
+        elif domain == humidifier.DOMAIN:
+            response["humiditySetpointRange"] = {
+                "minPercent": round(
+                    float(self.state.attributes[humidifier.ATTR_MIN_HUMIDITY])
+                ),
+                "maxPercent": round(
+                    float(self.state.attributes[humidifier.ATTR_MAX_HUMIDITY])
+                ),
+            }
 
         return response
 
@@ -889,6 +906,15 @@ class HumiditySettingTrait(_Trait):
                 if current_humidity is not None:
                     response["humidityAmbientPercent"] = round(float(current_humidity))
 
+        elif domain == humidifier.DOMAIN:
+            current_humidity = attrs.get(humidifier.ATTR_CURRENT_HUMIDITY)
+            if current_humidity is not None:
+                response["humidityAmbientPercent"] = round(float(current_humidity))
+
+            target_humidity = attrs.get(humidifier.ATTR_HUMIDITY)
+            if target_humidity is not None:
+                response["humiditySetpointPercent"] = round(float(target_humidity))
+
         return response
 
     async def execute(self, command, data, params, challenge):
@@ -897,6 +923,18 @@ class HumiditySettingTrait(_Trait):
         if domain == sensor.DOMAIN:
             raise SmartHomeError(
                 ERR_NOT_SUPPORTED, "Execute is not supported by sensor"
+            )
+
+        if command == COMMAND_SET_HUMIDITY:
+            await self.hass.services.async_call(
+                humidifier.DOMAIN,
+                humidifier.SERVICE_SET_HUMIDITY,
+                {
+                    ATTR_ENTITY_ID: self.state.entity_id,
+                    humidifier.ATTR_HUMIDITY: params["humidity"],
+                },
+                blocking=True,
+                context=data.context,
             )
 
 
@@ -1216,6 +1254,9 @@ class ModesTrait(_Trait):
     @staticmethod
     def supported(domain, features, device_class):
         """Test if state is supported."""
+        if domain == humidifier.DOMAIN:
+            return True
+
         if domain != media_player.DOMAIN:
             return False
 
@@ -1223,85 +1264,203 @@ class ModesTrait(_Trait):
 
     def sync_attributes(self):
         """Return mode attributes for a sync request."""
-        sources_list = self.state.attributes.get(
-            media_player.ATTR_INPUT_SOURCE_LIST, []
-        )
-        modes = []
-        sources = {}
+        domain = self.state.domain
+        payload = {}
+        if domain == media_player.DOMAIN:
+            sources_list = self.state.attributes.get(
+                media_player.ATTR_INPUT_SOURCE_LIST, []
+            )
+            modes = []
+            sources = {}
 
-        if sources_list:
-            sources = {
-                "name": self.HA_TO_GOOGLE.get(media_player.ATTR_INPUT_SOURCE),
-                "name_values": [{"name_synonym": ["input source"], "lang": "en"}],
-                "settings": [],
-                "ordered": False,
-            }
-            for source in sources_list:
-                if source in self.SUPPORTED_MODE_SETTINGS:
-                    src = source
-                    synonyms = self.SUPPORTED_MODE_SETTINGS.get(src)
-                elif source.lower() in self.SUPPORTED_MODE_SETTINGS:
-                    src = source.lower()
-                    synonyms = self.SUPPORTED_MODE_SETTINGS.get(src)
+            if sources_list:
+                sources = {
+                    "name": self.HA_TO_GOOGLE.get(media_player.ATTR_INPUT_SOURCE),
+                    "name_values": [{"name_synonym": ["input source"], "lang": "en"}],
+                    "settings": [],
+                    "ordered": False,
+                }
+                for source in sources_list:
+                    if source in self.SUPPORTED_MODE_SETTINGS:
+                        src = source
+                        synonyms = self.SUPPORTED_MODE_SETTINGS.get(src)
+                    elif source.lower() in self.SUPPORTED_MODE_SETTINGS:
+                        src = source.lower()
+                        synonyms = self.SUPPORTED_MODE_SETTINGS.get(src)
 
-                else:
-                    continue
+                    else:
+                        continue
 
-                sources["settings"].append(
-                    {
-                        "setting_name": src,
-                        "setting_values": [{"setting_synonym": synonyms, "lang": "en"}],
+                    sources["settings"].append(
+                        {
+                            "setting_name": src,
+                            "setting_values": [
+                                {"setting_synonym": synonyms, "lang": "en"}
+                            ],
+                        }
+                    )
+            if sources:
+                modes.append(sources)
+            payload = {"availableModes": modes}
+
+        elif domain == humidifier.DOMAIN:
+            attrs = self.state.attributes
+            supported = attrs.get(ATTR_SUPPORTED_FEATURES, 0)
+            operation_modes_list = attrs.get(humidifier.ATTR_OPERATION_MODES, [])
+            modes = []
+            operation_modes = {}
+
+            if len(operation_modes_list) > 1:
+                operation_modes = {
+                    "name": humidifier.ATTR_OPERATION_MODE,
+                    "name_values": [{"name_synonym": ["mode"], "lang": "en"}],
+                    "settings": [],
+                    "ordered": False,
+                }
+                for mode in operation_modes_list:
+                    operation_modes["settings"].append(
+                        {
+                            "setting_name": mode,
+                            "setting_values": [
+                                {"setting_synonym": [mode], "lang": "en"}
+                            ],
+                        }
+                    )
+            if operation_modes:
+                modes.append(operation_modes)
+
+            if supported & humidifier.SUPPORT_PRESET_MODE:
+                humidifier_preset_list = attrs.get(humidifier.ATTR_PRESET_MODES, [])
+                humidifier_presets = {}
+
+                if len(humidifier_preset_list) > 1:
+                    humidifier_presets = {
+                        "name": humidifier.ATTR_PRESET_MODE,
+                        "name_values": [{"name_synonym": ["preset"], "lang": "en"}],
+                        "settings": [],
+                        "ordered": False,
                     }
-                )
-        if sources:
-            modes.append(sources)
-        payload = {"availableModes": modes}
+                    for preset in humidifier_preset_list:
+                        humidifier_presets["settings"].append(
+                            {
+                                "setting_name": preset,
+                                "setting_values": [
+                                    {"setting_synonym": [preset], "lang": "en"}
+                                ],
+                            }
+                        )
+                if humidifier_presets:
+                    modes.append(humidifier_presets)
+
+            payload = {"availableModes": modes}
 
         return payload
 
     def query_attributes(self):
         """Return current modes."""
         attrs = self.state.attributes
+        domain = self.state.domain
         response = {}
-        mode_settings = {}
 
-        if attrs.get(media_player.ATTR_INPUT_SOURCE_LIST):
-            mode_settings.update(
-                {
-                    media_player.ATTR_INPUT_SOURCE: attrs.get(
-                        media_player.ATTR_INPUT_SOURCE
-                    )
-                }
-            )
-        if mode_settings:
-            response["on"] = self.state.state != STATE_OFF
-            response["online"] = True
+        if domain == media_player.DOMAIN:
+            mode_settings = {}
+
+            if attrs.get(media_player.ATTR_INPUT_SOURCE_LIST):
+                mode_settings.update(
+                    {
+                        media_player.ATTR_INPUT_SOURCE: attrs.get(
+                            media_player.ATTR_INPUT_SOURCE
+                        )
+                    }
+                )
+            if mode_settings:
+                response["on"] = self.state.state != STATE_OFF
+                response["online"] = True
+                response["currentModeSettings"] = mode_settings
+
+        elif domain == humidifier.DOMAIN:
+            supported = attrs.get(ATTR_SUPPORTED_FEATURES, 0)
+            mode_settings = {}
+
+            current_mode = self.state.state
+            if current_mode and current_mode != "None":
+                mode_settings.update({humidifier.ATTR_OPERATION_MODE: current_mode})
+                response["on"] = current_mode != humidifier.OPERATION_MODE_OFF
+                response["online"] = True
+            else:
+                mode_settings.update(
+                    {humidifier.ATTR_OPERATION_MODE: humidifier.OPERATION_MODE_OFF}
+                )
+                response["on"] = False
+                response["online"] = False
+
+            if supported & humidifier.SUPPORT_PRESET_MODE:
+                mode_settings.update(
+                    {
+                        humidifier.ATTR_PRESET_MODE: attrs.get(
+                            humidifier.ATTR_PRESET_MODE
+                        )
+                    }
+                )
+
             response["currentModeSettings"] = mode_settings
 
         return response
 
     async def execute(self, command, data, params, challenge):
-        """Execute an SetModes command."""
+        """Execute a SetModes command."""
+        domain = self.state.domain
         settings = params.get("updateModeSettings")
-        requested_source = settings.get(
-            self.HA_TO_GOOGLE.get(media_player.ATTR_INPUT_SOURCE)
-        )
 
-        if requested_source:
-            for src in self.state.attributes.get(media_player.ATTR_INPUT_SOURCE_LIST):
-                if src.lower() == requested_source.lower():
-                    source = src
+        if domain == media_player.DOMAIN:
+            requested_source = settings.get(
+                self.HA_TO_GOOGLE.get(media_player.ATTR_INPUT_SOURCE)
+            )
 
-                    await self.hass.services.async_call(
-                        media_player.DOMAIN,
-                        media_player.SERVICE_SELECT_SOURCE,
-                        {
-                            ATTR_ENTITY_ID: self.state.entity_id,
-                            media_player.ATTR_INPUT_SOURCE: source,
-                        },
-                        blocking=True,
-                        context=data.context,
-                    )
+            if requested_source:
+                for src in self.state.attributes.get(
+                    media_player.ATTR_INPUT_SOURCE_LIST
+                ):
+                    if src.lower() == requested_source.lower():
+                        source = src
+
+                        await self.hass.services.async_call(
+                            media_player.DOMAIN,
+                            media_player.SERVICE_SELECT_SOURCE,
+                            {
+                                ATTR_ENTITY_ID: self.state.entity_id,
+                                media_player.ATTR_INPUT_SOURCE: source,
+                            },
+                            blocking=True,
+                            context=data.context,
+                        )
+
+        elif domain == humidifier.DOMAIN:
+            requested_mode = settings.get(humidifier.ATTR_OPERATION_MODE)
+            if requested_mode:
+                await self.hass.services.async_call(
+                    humidifier.DOMAIN,
+                    humidifier.SERVICE_SET_OPERATION_MODE,
+                    {
+                        ATTR_ENTITY_ID: self.state.entity_id,
+                        humidifier.ATTR_OPERATION_MODE: requested_mode,
+                    },
+                    blocking=True,
+                    context=data.context,
+                )
+
+            requested_preset = settings.get(humidifier.ATTR_PRESET_MODE)
+            if requested_preset:
+                await self.hass.services.async_call(
+                    humidifier.DOMAIN,
+                    humidifier.SERVICE_SET_PRESET_MODE,
+                    {
+                        humidifier.ATTR_PRESET_MODE: requested_preset,
+                        ATTR_ENTITY_ID: self.state.entity_id,
+                    },
+                    blocking=True,
+                    context=data.context,
+                )
 
 
 @register_trait
