@@ -6,6 +6,7 @@ from homeassistant.components import (
     cover,
     fan,
     group,
+    humidity,
     input_boolean,
     light,
     lock,
@@ -39,6 +40,7 @@ DEFAULT_EXPOSED_DOMAINS = [
     "cover",
     "fan",
     "group",
+    "humidity",
     "input_boolean",
     "light",
     "media_player",
@@ -69,6 +71,8 @@ TYPE_DOOR = PREFIX_TYPES + "DOOR"
 TYPE_TV = PREFIX_TYPES + "TV"
 TYPE_SPEAKER = PREFIX_TYPES + "SPEAKER"
 TYPE_ALARM = PREFIX_TYPES + "SECURITYSYSTEM"
+TYPE_HUMIDIFIER = PREFIX_TYPES + "HUMIDIFIER"
+TYPE_DEHUMIDIFIER = PREFIX_TYPES + "DEHUMIDIFIER"
 
 SERVICE_REQUEST_SYNC = "request_sync"
 HOMEGRAPH_URL = "https://homegraph.googleapis.com/"
@@ -113,6 +117,7 @@ DOMAIN_TO_GOOGLE_TYPES = {
     switch.DOMAIN: TYPE_SWITCH,
     vacuum.DOMAIN: TYPE_VACUUM,
     alarm_control_panel.DOMAIN: TYPE_ALARM,
+    humidity.DOMAIN: TYPE_HUMIDIFIER,
 }
 
 DEVICE_CLASS_TO_GOOGLE_TYPES = {
@@ -128,6 +133,7 @@ DEVICE_CLASS_TO_GOOGLE_TYPES = {
     (media_player.DOMAIN, media_player.DEVICE_CLASS_TV): TYPE_TV,
     (media_player.DOMAIN, media_player.DEVICE_CLASS_SPEAKER): TYPE_SPEAKER,
     (sensor.DOMAIN, sensor.DEVICE_CLASS_TEMPERATURE): TYPE_SENSOR,
+    (sensor.DOMAIN, sensor.DEVICE_CLASS_HUMIDITY): TYPE_SENSOR,
 }
 
 CHALLENGE_ACK_NEEDED = "ackNeeded"

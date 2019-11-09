@@ -216,6 +216,45 @@ DEMO_DEVICES = [
         "willReportState": False,
     },
     {
+        "id": "humidity.humidifier",
+        "name": {"name": "Humidifier"},
+        "traits": [
+            "action.devices.traits.HumiditySetting",
+            "action.devices.traits.Modes",
+            "action.devices.traits.OnOff"
+        ],
+        "type": "action.devices.types.HUMIDIFIER",
+        "willReportState": False,
+    },
+    {
+        "id": "humidity.dehumidifier",
+        "name": {"name": "Dehumidifier"},
+        "traits": [
+            "action.devices.traits.HumiditySetting",
+            "action.devices.traits.Modes",
+            "action.devices.traits.OnOff"
+        ],
+        "type": "action.devices.types.DEHUMIDIFIER",
+        "willReportState": False,
+        "attributes": {
+            "humiditySetpointRange": {
+                "minPercent": 30,
+                "maxPercent": 99,
+            },
+        },
+    },
+    {
+        "id": "humidity.hygrostat",
+        "name": {"name": "Hygrostat"},
+        "traits": [
+            "action.devices.traits.HumiditySetting",
+            "action.devices.traits.Modes",
+            "action.devices.traits.OnOff"
+        ],
+        "type": "action.devices.types.HUMIDIFIER",
+        "willReportState": False,
+    },
+    {
         "id": "lock.front_door",
         "name": {"name": "Front Door"},
         "traits": ["action.devices.traits.LockUnlock"],

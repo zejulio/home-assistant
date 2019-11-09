@@ -17,6 +17,7 @@ from homeassistant.components import (
     alarm_control_panel,
 )
 from homeassistant.components.climate import const as climate
+from homeassistant.components.humidity import const as humidity
 from homeassistant.const import CLOUD_NEVER_EXPOSED_ENTITIES
 from homeassistant.components import google_assistant as ga
 
@@ -99,6 +100,12 @@ def hass_fixture(loop, hass):
     loop.run_until_complete(
         setup.async_setup_component(
             hass, climate.DOMAIN, {"climate": [{"platform": "demo"}]}
+        )
+    )
+
+    loop.run_until_complete(
+        setup.async_setup_component(
+            hass, humidity.DOMAIN, {"humidity": [{"platform": "demo"}]}
         )
     )
 
@@ -300,6 +307,61 @@ def test_query_climate_request_f(hass_fixture, assistant_client, auth_header):
         "thermostatHumidityAmbient": 54,
     }
     hass_fixture.config.units.temperature_unit = const.TEMP_CELSIUS
+
+
+@asyncio.coroutine
+def test_query_humidity_request(hass_fixture, assistant_client, auth_header):
+    """Test a query request."""
+    reqid = "5711642932632160984"
+    data = {
+        "requestId": reqid,
+        "inputs": [
+            {
+                "intent": "action.devices.QUERY",
+                "payload": {
+                    "devices": [
+                        {"id": "humidity.humidifier"},
+                        {"id": "humidity.dehumidifier"},
+                        {"id": "humidity.hygrostat"},
+                    ]
+                },
+            }
+        ],
+    }
+    result = yield from assistant_client.post(
+        ga.const.GOOGLE_ASSISTANT_API_ENDPOINT,
+        data=json.dumps(data),
+        headers=auth_header,
+    )
+    assert result.status == 200
+    body = yield from result.json()
+    assert body.get("requestId") == reqid
+    devices = body["payload"]["devices"]
+    assert len(devices) == 3
+    assert devices["humidity.humidifier"] == {
+        "on": True,
+        "online": True,
+        "humiditySetpointPercent": 68,
+        "humidityAmbientPercent": 77,
+        "currentModeSettings": {"humidifier_mode": "humidify"},
+    }
+    assert devices["humidity.dehumidifier"] == {
+        "on": True,
+        "online": True,
+        "humiditySetpointPercent": 54,
+        "humidityAmbientPercent": 67,
+        "currentModeSettings": {"humidifier_mode": "dry"},
+    }
+    assert devices["humidity.hygrostat"] == {
+        "on": True,
+        "online": True,
+        "humiditySetpointPercent": 50,
+        "humidityAmbientPercent": 49,
+        "currentModeSettings": {
+            "humidifier_mode": "humidify_dry",
+            "preset_mode": "home",
+        },
+    }
 
 
 @asyncio.coroutine
