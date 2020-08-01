@@ -47,6 +47,7 @@ CONF_ON_ACTION = "turn_on_action"
 DEFAULT_NAME = "Philips TV"
 DEFAULT_API_VERSION = "1"
 DEFAULT_SCAN_INTERVAL = 30
+SCAN_INTERVAL_IF_ON = 1.0
 
 DELAY_ACTION_DEFAULT = 2.0
 DELAY_ACTION_ON = 10.0
@@ -111,7 +112,13 @@ class PhilipsTVMediaPlayer(MediaPlayerEntity):
         def update_and_restart(event_time):
             update_forced(event_time)
             self._update_task = track_time_interval(
-                self.hass, update_forced, timedelta(seconds=DEFAULT_SCAN_INTERVAL)
+                self.hass,
+                update_forced,
+                timedelta(
+                    seconds=SCAN_INTERVAL_IF_ON
+                    if self.state == STATE_ON
+                    else DEFAULT_SCAN_INTERVAL
+                ),
             )
 
         call_later(self.hass, delay, update_and_restart)
